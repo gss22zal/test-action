@@ -15,7 +15,7 @@ COPY app.py .
 
 # Переменная окружения
 ENV FLASK_ENV=production
-ENV PORT=8000
+ENV PORT=8080
 
 # Открываем порт
 EXPOSE 8080
