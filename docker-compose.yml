@@ -1,0 +1,53 @@
+services:
+  # 📦 Локальный Docker Registry с аутентификацией
+  registry:
+    image: registry:2
+    container_name: docker-registry
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+      - ./auth:/auth
+    restart: unless-stopped
+    environment:
+      - REGISTRY_AUTH=htpasswd
+      - REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm
+      - REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd
+    networks:
+      - autodeploy
+
+  # 🔁 Watchtower — автообновление
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+      - DOCKER_API_VERSION=1.40
+    restart: unless-stopped
+    command: --interval 300 --cleanup --label-enable
+    networks:
+      - autodeploy
+    depends_on:
+      - registry
+
+  # 🚀 Ваше приложение
+  flask-app:
+    image: 91.224.87.6:5000/test-action:latest
+    container_name: flask-app
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    networks:
+      - autodeploy
+
+networks:
+  autodeploy:
+    driver: bridge
