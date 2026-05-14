@@ -1,81 +1,63 @@
-name: Deploy Application
+name: Docker Build & Deploy
 
 on:
   push:
-    branches: [ main ]
-    tags: [ 'v*.*.*' ]
-
-env:
-  IMAGE_NAME: test-action
-  DOCKER_REGISTRY: ghcr.io/${{ github.repository_owner }}
+    branches: [ "main" ]  # Укажите вашу основную ветку
+  workflow_dispatch:      # Позволяет запускать вручную из вкладки Actions
 
 jobs:
-  deploy:
+  # ------------------- ДЖОБА 1: Сборка и публикация -------------------
+  build-and-push:
+    name: Сборка и push в GHCR
     runs-on: ubuntu-latest
-    
-    environment:
-      name: production
-      url: https://example.com
-    
+    permissions:
+      contents: read
+      packages: write   # Обязательно для записи в GitHub Container Registry
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout кода
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Логин в GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.DOCKER_REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Сборка и отправка образа
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # В GHCR имя репозитория автоматически приводится к нижнему регистру
+          tags: ghcr.io/${{ github.repository }}:latest
 
-    - name: Extract metadata (tags, labels)
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch,branch=main
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=latest
+  # ------------------- ДЖОБА 2: Деплой через SSH -------------------
+  deploy-to-server:
+    name: Развертывание на сервере
+    needs: build-and-push  # Запускается только после успешной сборки
+    runs-on: ubuntu-latest
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+    steps:
+      - name: Подключение по SSH и запуск контейнера
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
+          script: |
+            # 1. Скачиваем свежий образ из GHCR
+            docker pull ghcr.io/${{ github.repository }}:latest
 
-    - name: Deploy to server
-      if: github.ref == 'refs/heads/main'
-      run: |
-        echo "Deploying to production server..."
-        echo "This step requires SSH access or webhook configuration"
-        # Пример: запуск через SSH
-        # ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "docker pull ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:latest && docker-compose up -d"
-      env:
-        SSH_HOST: ${{ secrets.SSH_HOST }}
-        SSH_USER: ${{ secrets.SSH_USER }}
+            # 2. Останавливаем и удаляем старый контейнер (|| true чтобы не падать, если его нет)
+            docker stop myapp || true
+            docker rm myapp || true
 
-    - name: Notify deployment status
-      uses: 8398a7/action-slack@v3
-      if: always()
-      with:
-        status: ${{ job.status }}
-        text: "Deployment ${{ job.status }} for ${{ github.repository }}"
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      continue-on-error: true
-
-    - name: Create GitHub Deployment
-      uses: bobheadxi/deployments@v0.5
-      id: deployment
-      with:
-        step: start
-        token: ${{ secrets.GITHUB_TOKEN }}
-        env: production
+            # 3. Запускаем новый контейнер
+            docker run -d \
+              --name myapp \
+              --restart unless-stopped \
+              -p 8080:80 \
+              ghcr.io/${{ github.repository }}:latest
