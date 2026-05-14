@@ -53,7 +53,7 @@ def get_env():
     safe_vars = {
         'FLASK_ENV': os.environ.get('FLASK_ENV'),
         'APP_NAME': os.environ.get('APP_NAME', 'Flask Test'),
-        'PORT': os.environ.get('PORT', '8080')
+        'PORT': os.environ.get('PORT', '8081')
     }
     return jsonify({'environment': safe_vars})
 
@@ -95,6 +95,6 @@ def server_datetime():
 
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 8081))
     debug = os.environ.get('FLASK_ENV') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)
