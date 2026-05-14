@@ -40,7 +40,7 @@ def info():
     """Информация о контейнере"""
     return jsonify({
         'app': 'Flask Action Test',
-        'version': '1.0.5',
+        'version': '1.0.8',
         'python_version': os.popen('python --version').read().strip(),
         'container_id': os.environ.get('HOSTNAME', 'unknown'),
         'environment': os.environ.get('FLASK_ENV', 'development')
