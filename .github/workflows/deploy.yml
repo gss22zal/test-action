@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Подключение по SSH и запуск контейнера
-        uses: appleboy/ssh-action@v1.0.7
+        uses: appleboy/ssh-action@v1.0.8
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
